@@ -2,7 +2,7 @@
 
 Repository of materials for SICSS-Edinburgh, 2023.
 
-Setting up your environment before the class is on you due to time constraints, please follow 0-start_here.md
+Setting up your environment before the class is on you due to time constraints, please follow [0-start_here.md](https://github.com/tugrulz/sicss_edinburgh_2025/blob/main/0-start_here.md)
 
 **Other materials will be updated later**
 
@@ -20,3 +20,5 @@ During Week 2, we will be working on either:
 2. Your own group project idea
 
 We will provide a set of groups project ideas that have been suggested by your instructors or other members of Edinburgh Social Science/Informatics Faculty. The idea is that you work on these within your groups with advice from your instructor.
+
+
