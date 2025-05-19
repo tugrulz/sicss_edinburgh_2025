@@ -70,6 +70,7 @@ Cursor: https://www.cursor.com (**Pro version is free for students!!**).
 
 Alternatives: [Windsurf](https://windsurf.com), [VS Code](https://code.visualstudio.com), [PyCharm](https://www.jetbrains.com/pycharm/) (Weak AI Support)
 
+**Warning**: IDEs may be collecting your data to train their AIs, but you can usually opt out of this. For instance, on Cursor, go to Settings, then general, and then enable privacy mode.
 
 **R:** Cursor supports R but it requires a bit of installation.   
 First, install "R Extension for Visual Studio Code" https://open-vsx.org/extension/reditorsupport/r.   
@@ -83,9 +84,10 @@ To create an environment with R installed, run the command and activate it.
 `conda create -n sicss_r  r-essentials r-base`                 
 `conda activate sicss_r`
 
-**R Studio (Optional):** Before the AI revolution, SICSS recommended R Studio to run R. (They have not updated yet).    
-We recommend Cursor as R Studio does not have any AI features (yet). However, if you have problems with Cursor or want to go traditional, you can use R Studio.   
-https://posit.co/downloads/ (Click on download RSTUDIO).     
+If these do not work, install [R debugger](https://marketplace.cursorapi.com/items?itemName=RDebugger.r-debugger) extension and then enable debug mode from the sidebar.
+
+**R Studio (Optional):** If you could not set Cursor up (which is not your fault, the software is new) or you do not want AI features you can use R Studio, which is recommended by the main SICSS organization.
+https://posit.co/downloads/ (Click on download RSTUDIO).
 
 # Installing a Collaboration Software ("Version Control System")
 Multiple people may work on the same code. To avoid conflicts, software engineers use a "version control system".  
