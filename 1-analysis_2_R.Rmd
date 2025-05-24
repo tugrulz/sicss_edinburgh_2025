@@ -554,7 +554,7 @@ and the most important tip:
 ```{r}
 library(jsonlite)
 json_data <- toJSON(df, auto_unbox = TRUE)
-write(json_data, file = "data.json")
+write(json_data, file = "data/twitter_data_chatgpt_v2.json.bz2")
 
 ```
 
