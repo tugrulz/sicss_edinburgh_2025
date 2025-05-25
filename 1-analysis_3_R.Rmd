@@ -1,0 +1,585 @@
+---
+title: "1-analysis_3"
+author: "Artemis_Deligianni"
+date: "2025-05-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(jsonlite)
+```
+
+# Reading JSON
+We saved the json as records (i.e., each row is a separate json object) remember?
+
+```{r}
+# Read compressed JSON
+# Note: the following my take over a minute
+path <- normalizePath("./data/twitter_data_chatgpt_v2.json.bz2")
+con <- bzfile(path, "r")
+json_text <- readLines(con, warn = FALSE)
+close(con)
+df <- fromJSON(paste(json_text, collapse = "\n"))
+
+
+head(df)
+```
+# Basic Visualizations
+Visualization is a crucial tool in data analysis to understand the data, identify patterns, relationships and communicate findings. Common visualization techniques and the questions they answer:
+
+- **Line Plot**: How does a variable change over time?	
+- **Histogram**: How values are distributed?
+- **Bar Plot**: How do groups compare?
+- **Box Plot**: How values are distributed AND groups compare (the Swiss army knife of plots)
+- **Scatter**: How are two metrics related?
+- **Pie Chart:** Don't use this crap
+
+In R we can plot mostly anything with ggolot2; a great package for plotting and visualising. 
+
+We will cover some basic plot functions here.Refer to the documentation by if you wish to go deepr https://ggplot2.tidyverse.org/
+
+#### Line Plot
+Default plot when you call df.plot(). It will set the x-axis the index of the dataframe by default. The lines will show the columns.
+
+Our dataframe's index is id, which does not make sense for the line plot or any kind of plot as you see above, so we set the x-axis to be created_at. 
+
+```{r}
+library(ggplot2)
+
+ggplot(df, aes(x=created_at, y=like_count))+ #tells ggplot which data to use
+  geom_line()+ #plots the line
+  labs(title="Like Count Over Time") #tells R to add a title
+```
+This is a very basic line plot of like counts over time.We can use line plots to represent variables we think are linearly related; e.g. height and weight
+
+#### Histogram
+Choose column to see its distribution of values. For instance, let's do retweet count:
+
+```{r}
+ggplot(df, aes(x=retweet_count))+
+  geom_histogram(col="white", fill="steelblue")+ #col for white outline and fill for blue fill.
+  labs(title="Histogram of retweet counts")
+```
+Looks awful is not it? The data clearly does not follow a normal distribution. Most tweets receive no retweets, leading to a large spike at zero. Meanwhile, a small number of tweets receive very high retweet counts—these are outliers. This results in a highly skewed distribution with a long tail to the right.
+
+There are several common ways to deal with this kind of skewed data:
+
+- Remove or cap outliers to focus on the bulk of the data.
+- Manually define retweet count categories, such as 0, 1–10, 11–1000, and 1000+, to summarize the data more meaningfully.
+- Redefine histogram bins to better capture the shape of the distribution.
+- Apply a logarithmic scale to the x-axis and/or y-axis to compress the range and make the distribution more interpretable.
+
+
+
+I usually prefer the last one:
+
+```{r}
+ggplot(df, aes(x=log(retweet_count)))+ #wrapping log() around retweet counts to transform to log-transform them 
+  geom_histogram(fill = "steelblue", color = "white", binwidth = 1)+ #binwidth sets the x-axis steps to intervals of 1
+  scale_y_log10(breaks = c(1, 10, 100, 1000, 10000, 100000, 1000000)) + #we make the scale log and set custom steps
+  labs(
+    title = "Histogram of log1p(retweet_count)", #add title 
+    x = "log1p(retweet_count)", #good to rename the x-axis label to reflect the changes we made
+    y = "Tweet count (log scale)" #same here for.y-axis
+  ) +
+  theme_minimal() #sets a minimal theme, you play around with others, e.g. theme_classic(). 
+
+```
+
+We used `log()` to log-transform the retweet counts. The highest retweet count in the dataset is 16,080 (approximately `e^9.6`), while the lowest values—0 and 1—are mapped to 0 after the transformation. So we could squeeze in the entire range of retweet counts to 0-10.   
+
+We also applied a logarithmic scale to the **y-axis** (not to the actual values), so it increases exponentially (1, 10, 100, …) instead of linearly. So we won't see a tower of 10^6 and a tiny bar representing 10^5.     
+We could have used scale_x_log10() for the**x-axis** directly, but I wanted to show you how to transform your variables directly in the ggplot function so you are aware of options. You can try making the same plot as above using scale_x_log10() if you want. 
+
+
+#### Bar Plot
+
+Bar plot is good when you are comparing groups (i.e., categorical variables) over a single value (or multiple if you are using side-by-side bars.)
+
+Essentially, what we did with histograms were automatically creating groups by binning.
+But we could define categories of retweet counts manually and show their frequencies with a bar plot.
+Below, we first define `bins`, name them by `labels`.
+We create categories using the function `cut` which put the values (`df$retweet_count` in this case) into bins you define.
+We weill then use ggplot's geom_bar() to plot the counts
+
+
+```{r}
+# Define bins and labels
+bins <- c(0, 1, 10, 100, 1000, Inf)
+labels <- c('0', '1-10', '11-100', '101-1000', '1000+')
+
+# Cut the data into categories (assuming df$retweet_count is your data)
+df$retweet_category <- cut(df$retweet_count, breaks = bins, labels = labels, right = FALSE)
+
+# Count tweets in each category
+retweet_counts <- table(df$retweet_category)
+
+# Convert to data frame for ggplot
+retweet_df <- as.data.frame(retweet_counts)
+colnames(retweet_df) <- c("RetweetRange", "TweetCount")
+
+# Create bar plot
+ggplot(retweet_df, aes(x = RetweetRange, y = TweetCount)) +
+  geom_bar(stat = "identity", fill = "steelblue") + #identity is used here to tell R we have already calculakted the counts and to use those
+  labs(title = "Distribution of Retweet Counts",
+       x = "Retweet Count Range",
+       y = "Number of Tweets") +
+  theme_minimal()
+```
+
+You don't always need to define the categories manually. You can use any value as categories as long as it makes sense.    
+For instance let's see the number of tweets posted each day of the week the tweets.    
+Don't forget to aggregate!   
+
+
+```{r}
+#Let's plot the day of the week tweet counts
+
+tweet_counts_per_day.plot(kind='bar', title='Number of Tweets by Day of Week')
+
+df%>%drop_na(day_of_week)%>% #i'm filtering nas so we do not plot those as a day category
+ggplot(., aes(x=day_of_week))+ #dot here stands for the filtered df 
+  geom_bar(fill = "steelblue")+ # geom_bar can automatically calculate the counts for us!
+  labs(title = "Distribution of Retweet Counts",
+       x = "Day of the Week",
+       y = "Number of Tweets") +
+  theme_minimal()
+```
+Most tweets are posted in mid-week and not on weekends where people have more free time. 
+Not good for productivity!
+
+That said, if geom_bar() can compute counts then why do we have the link="identity" function? Sometimes we might want to plot variables, like group scores, which aren't counts and override the automatic counting. 
+
+#### Box Plot
+
+Box plots shows a distribution (and compare multiple distributions) without aggregation (finally, yay)    
+It does so by computing the minimum, the maximum, the median, and the first quartile (25% percentile) and the third quartile (75% percentile).         
+The box itself represents the interquartile range (IQR), which is the distance between the first and third quartiles.       
+The minimum and the maximum is computed by subtracting 1.5 times the IQR from the first quartile and adding 1.5 times the IQR to the third quartile respectively.  
+**These are not the same as the minimum and the maximum value in the data**, which is instead indicated by the extended lines outside the box.   
+Any data points that fall outside 1.5 times the IQR from the edges of the box are considered **outliers** and are typically shown as individual points. 
+
+The retweet count is mostly 0s, which means the minimum and the maximum will be 0s and everything else is an outlier. So a box plot does not make sense:
+```{r}
+ggplot(df,aes(y=retweet_count))+
+  geom_boxplot(col="steelblue")+
+  labs(title = "Distribution of Retweet Counts")+
+  theme_minimal()
+
+```
+
+Instead, let's investigate our previous finding which indicates that most tweets were posted mid-week. 
+Could this result be driven by outliers? For instance, did a bot go rogue and posted a million times on a Wednesday even though we have only 500k tweets, and inflated the numbers for Wednesday? 
+Are **all* Wednesdays consistently busy on Twitter or Xverse? Or was this a one-off anomaly?
+Let's find out
+
+We need to compute the number of rows/tweets for each day, and thus, need to aggregate by the date. Thus we group by the date and have a dataframe that has only the date and the number of tweets.
+
+We still need to **retain the day of the week** information. One option is to regenerate it after grouping.       
+But a simple trick that decreases the amount of code is to add the categories to the `group_by` for create_at and day_of_week, calculate the counts and then `ungroup()`.     
+
+```{r}
+daily_counts<-df%>%group_by(created_at, day_of_week)%>%mutate(tweet_count=n())%>%ungroup()%>%drop_na(tweet_count, day_of_week)
+head(daily_counts)
+```
+
+```{r}
+# Create a box plot comparing tweet counts across days of the week
+ggplot(daily_counts, aes(y=tweet_count, x=day_of_week, fill = day_of_week))+ #fill will colour eeach dat of week differently 
+  geom_boxplot()+
+  theme_linedraw()+
+  labs(title="Box plots of tweet count by day of the week")
+```
+
+My suspicions were right - Wednesday does indeed have an outlier that inflates the total number of tweets on Wednesday.     
+It makes more sense to conclude that people tweet the most about ChatGPT on Tuesdays.       
+That said, the overall insight still holds: people tend to tweet more during the middle of the week.  
+Perhaps they surf on TikTok over the weekends instead?
+
+# Scatter Plot
+Scatter plot is good when you want to see the relationship between two variables.    
+Like box plots, we do not aggregate and show individual data points instead, including outliers (yikes.)
+
+Let's see if there is a relationship between the number of likes and the number of retweets.  
+```{r}
+# Create scatter plot of likes vs retweets 
+ggplot(df, aes(x=retweet_count, y=like_count))+
+  ylim(0,60000)+
+  xlim(0, 16000)+
+  geom_point(col="purple")+
+  labs(title="Scatteplot of Likes and Retweets")
+  
+  
+
+```
+
+Well, I'm not sure if there is a relationship, because there are some points with many retweets but few likes, and vice versa. These create outliers along both axes.
+
+To address this, I will log-transform both axes.   
+I will also set `alpha = 0.1` to make the points more transparent, so overlapping data points form denser regions.   
+Finally, I’ll set `figsize=(6,6)` to produce a square plot, which makes it easier to interpret the relationship between the variables.   
+
+```{r}
+ggplot(df, aes(x=retweet_count, y=like_count))+
+  scale_y_log10()+
+  scale_x_log10()+
+  geom_point(col="purple", alpha=0.1)+
+  labs(title="Scatteplot of Likes and Retweets",
+       x="Retween count (log scale)",
+       y="Like coumt (log scale)")
+  
+```
+Yes there is a relationship between retweet counts and likes count (thank you captain obvious) but it’s not perfectly linear — tweets receive more likes than retweets.
+
+# Correlation
+Correlation measures the strength and direction of a linear relationship between two continuous variables.   
+It is essentially quantifying what we have just observed on the scatter plot.
+
+R has a built-in function to compute correlation by `cor()`. 
+It computes **Pearson correlation coefficient** by default but can also compute Kendall Tau (`method='kendall'`) and Spearmank rank correlation (`method='spearman'`). DO NOT use cor() for the kendall method! It is too memory intensive and will crash R given our very large df. We will use corr.test from the `psych` package instead for that one. 
+All take values between -1 and 1. Higher absolute values indicate stronger correlation; the sign shows the direction (positive or negative).
+
+I leave going through their formulas and the logic to you as exercise.  
+But TL;DR: Pearson is based on values (e.g., like and retweet counts) and Spearman is based on rank (e.g., is the most liked tweet also the most retweeted)
+Spearman in a skewed dataset like ours. But it does not hurt if we compute and report all three.
+
+```{r}
+# Print correlation matrices with labels to identify which is which
+print("Pearson correlation (default):")
+print(cor(df$retweet_count, df$like_count))
+print("Spearman correlation:")
+print(cor(df$retweet_count, df$like_count, method = "spearman"))
+print("Kendall correlation:") 
+library(psych)
+# print(corr.test(df$retweet_count, df$like_count, method = "kendall")) #this make take a while to run, I generally do not recommend
+
+
+```
+
+
+```{r}
+# Create thresholds (100 points between 0 and 1000)
+thresholds <- seq(0, 1000, length.out = 100)
+
+# Initialize vector to store correlations
+correlations <- numeric(length(thresholds))
+
+# Loop over thresholds and calculate Spearman correlation
+for (i in seq_along(thresholds)) {
+  threshold <- thresholds[i]
+  
+  # Filter rows with engagement_count > threshold
+  filtered_df <- df[df$engagement_count > threshold, ]
+  
+  # Check if there are at least two rows to calculate correlation
+  if (nrow(filtered_df) > 1) {
+    corr_matrix <- cor(filtered_df$retweet_count, filtered_df$like_count, method = "spearman")
+    correlations[i] <- corr_matrix
+  } else {
+    correlations[i] <- NA  # Not enough data points
+  }
+}
+
+# Create data frame for plotting
+corr_df <- data.frame(
+  threshold = thresholds,
+  correlation = correlations
+)
+
+# Plot using ggplot2
+ggplot(corr_df, aes(x = threshold, y = correlation)) +
+  geom_line() +
+  geom_point(col="steelblue") +
+  ggtitle("Spearman Correlation by Engagement Threshold") +
+  xlab("Minimum Engagement Threshold") +
+  ylab("Correlation Coefficient") +
+  theme_minimal() +
+  theme(panel.grid.major = element_line(color = "gray90"))
+```
+Interestingly, the relationship decline for popular tweet that have more than 400 engagements. Weird 
+
+# Handling dates
+R defaults to representing dates as a character class. We will therefore use lubridate to handle dates appropriately.
+
+```{r}
+class(df$created_at)
+```
+
+Let's first see what format the dates are in so we can tell R how to read them:
+```{r}
+df$created_at[1]
+```
+The format seems to follow year, month, day and then hours, minutes and seconds. Therefore we will use the ymd_hms() function from lubricate togethr with mutate() to apply it to every row in the df.
+
+
+```{r}
+library(lubridate)
+df<-df%>%mutate(created_at=ymd_hms(created_at))
+head(df)
+```
+You will notice now that the dates are formated as <S3: POSIXct>; this is the date and time format in lubridate. 
+
+Some data sources include timezone information in their date-time fields. For instance, Twitter/X (as well as Reddit and YouTube) store datetime data in UTC (which is a fancy name for GMT). 
+
+This means that if a user tweets from Japan at 11:00 AM Japan Standard Time, the timestamp will appear as 3:00 AM UTC—which can be confusing. If you're working with data from a specific country or region, it's a good idea to convert the timestamps to the local timezone using you can specify that in the lubridate function using `tz=`.
+We can also tell R how to read the dates as being in in Asia/Tokyo timezone:
+
+```{r}
+df<-df%>%mutate(created_at=ymd_hms(created_at, tz = "Asia/Tokyo"))
+
+df$created_at[1]
+```
+We can see now that our datetime object has a timezone (JST)
+
+
+Use .dt accessor to access each date component: `date(), year(), month(), day(), hour(), wday(), weekdays(), months() `
+
+Let's create new columns to represent the month and the day of the week, and hour of the day each tweet was created
+
+```{r}
+df['month'] = df['created_at'].dt.month
+df['day_of_week'] = df['created_at'].dt.day_name()
+df['hour'] = df['created_at'].dt.hour
+
+df$month<-month(df$created_at)
+df$day_of_week<-weekdays(df$created_at)
+df$hour<-hour(df$created_at)
+
+
+head(df)
+```
+
+You can filter on datetime columns:
+
+```{r}
+# Filter tweets from January 2023 (we only have 2023 in our dates which makes this simpler)
+
+jan_2023_tweets<-df%>%filter(month==1)
+cat("Number of tweets from January:", nrow(jan_2023_tweets))
+
+# Filter tweets from weekends
+weekend_tweets<-df%>%filter(day_of_week %in% c("Saturday", "Sunday"))
+cat("Number of tweets from weekends:",nrow(weekend_tweets))
+
+# Filter tweets from business hours (9 AM to 5 PM)
+business_hours_tweets<-df%>%filter(hour>=9& hour<=17)
+cat("Number of tweets during business hours:", nrow(business_hours_tweets))
+
+#Filter tweets after 1st of March 2023
+after_first_of_march<-df%>%filter(created_at>'2023-03-01')
+
+cat("Number of tweets after the first of March:", nrow(after_first_of_march))
+```
+
+You can groupby a specific date component, e.g., group by the name of the date and show the size of each group, which shows the number of tweets posted in each day.
+
+```{r}
+
+df%>%group_by(day_of_week)%>%count()
+```
+You can compute the time difference between the datetime and a predetermined date
+
+```{r}
+# Example: Calculate time difference between tweets and a reference date
+reference_date = ymd_hms('2023-01-01 00:00:00+00:00')
+print('Time passed since 2023 new years:')
+head(df$created_at - reference_date)
+```
+
+Alternatively, you can subtract between consecutive rows using `diff()`
+
+```{r}
+head(diff(df$created_at))
+```
+
+## Resampling
+Resampling is changing the frequency of your data.Resampling can mean a number of things e.g. bootstrapping. Here we will only be creating bins for the date intervals in our data that we have no data for.
+
+It is especially useful when your data is irregular, which is the case with our Twitter dataset. Tweets are stored as they are posted, and there is no guarantee that we will have at least one tweet for every day, hour, or a second (probably for Twitter we would have, but think about TruthSocial).
+
+You resample when you want to aggregate the data over time, e.g., the count of tweets per day, hour, per 3 hours etc. Thus, first, you reshape the data so that the index will be the datetime and the values will show some aggregated statistics such as count.
+
+```{r}
+#Let's make a new dataframe call df_time from df
+df_time<-df%>%select(created_at, id)
+
+# Resample data to different time frequencies
+# 'D' (daily), 'W' (weekly), 'M' (monthly), 'H' (hourly)
+daily_tweets<-df_time %>%
+  mutate(date = floor_date(created_at, unit = "day")) %>% #remove timezone information and keep days
+  group_by(date) %>% 
+  summarise(count = n()) %>% #get the counts
+  ungroup()%>%drop_na()%>% #ungroup and drop NAs, important for the next stage
+  right_join(
+    tibble(date = seq(min(.$date), max(.$date), by = "day")), by = "date") %>% #create a sequence to fill in the min_mx by day; tibbles are like simple dataframes in R
+  arrange(date) 
+
+print("Daily tweet counts:")
+head(daily_tweets)
+
+weekly_tweets<-df_time%>%
+    mutate(week = floor_date(created_at, unit = "week", week_start = 1)) %>%  # week starts on Monday
+    group_by(week) %>% 
+    summarise(count = n()) %>% #get the counts
+    ungroup()%>%drop_na()%>% #ungroup and drop NAs, important for the next stage
+    right_join(
+    tibble(week = seq(min(.$week), max(.$week), by = "week")), #create a sequence to fill in the min_mx by day
+    by = "week") %>%
+  arrange(week) 
+
+print("Weekly tweet counts:")
+weekly_tweets
+
+monthly_tweets<-df_time%>%
+  mutate(month = floor_date(created_at, unit = "month")) %>% 
+  group_by(month) %>% 
+  summarise(count = n()) %>% #get the counts
+  ungroup()%>%drop_na()%>% #ungroup and drop NAs, important for the next stage
+  right_join(
+    tibble(month = seq(min(.$month), max(.$month), by = "month")), #create a sequence to fill in the min_mx by day
+    by = "month") %>%
+  arrange(month) 
+
+print("Monthly tweet counts:")
+monthly_tweets
+```
+
+
+
+```{r}
+
+df_time<-df%>%select(created_at, id, retweet_count, like_count)
+
+two_hour_tweets<-df_time%>%
+  mutate(interval_2h = floor_date(created_at, unit = "2 hours")) %>%
+  group_by(interval_2h) %>% 
+  summarise(retweet_count = mean(retweet_count), .groups = "drop") %>% #get the mean count
+  ungroup()%>%drop_na()%>% #ungroup and drop NAs, important for the next stage
+  right_join(
+    tibble(interval_2h = seq(min(.$interval_2h), max(.$interval_2h), by = "2 hours")), #create a sequence to fill in the min_mx by day
+    by = "interval_2h") %>%
+  arrange(interval_2h)%>%mutate(retweet_count = replace_na(retweet_count, 0)) #replace NAs with 0 (this is an assumption, we might prefer to remove NAs altogether depending the analysis we plan to do.)
+
+print("Mean retweet count in each 2-hour interval:")
+head(two_hour_tweets)
+
+three_day_tweets<-df_time%>%
+  mutate(interval_3d = floor_date(created_at, unit = "3 days")) %>%
+  group_by(interval_3d)%>%
+  summarise(like_sum=sum(like_count), .groups = "drop")%>%
+  ungroup()%>%
+  drop_na()%>%
+  right_join(
+    tibble(interval_3d = seq(min(.$interval_3d), max(.$interval_3d), by = "3 days")), by = "interval_3d") %>%
+  arrange(interval_3d)%>%mutate(like_sum = replace_na(like_sum, 0)) 
+  
+print("Total like count in 3-day intervals:")
+head(three_day_tweets)
+
+business_day_tweets<-df_time%>%
+    filter(wday(created_at) %in% 2:6) %>% #filter Monday-Friday
+    mutate(business_day = floor_date(created_at, unit = "day")) %>%
+    group_by(business_day)%>%
+    summarise(count=n(), .groups = "drop")%>%
+    ungroup()%>%
+    drop_na()%>%
+    right_join(
+    tibble(business_day = seq(min(.$business_day), max(.$business_day), by = "day")), by = "business_day") %>%
+  arrange(business_day)%>%mutate(count = replace_na(count, 0)) 
+  
+
+print("Business day tweet counts:")
+head(business_day_tweets)
+
+
+```
+
+## Rolling Window Analysis
+A rolling window allows us to calculate statistics over a sliding window of time. This is useful for smoothing out noise and identifying trends
+We create a rolling window using the slider library on our df with arrange() and mutate(). We then plot using ggplot()
+
+In the code below we use resampled the days data from before, showing the number of rows (tweets) per day
+WE use this to create a rolling window of length 7 and length 30. See how the lines differ
+
+```{r}
+library(slider)
+
+
+rolling_7d<-daily_tweets %>%
+  arrange(date) %>%
+  mutate(rolling_mean_7d = slide_dbl(count, mean, .before = 6, .complete = TRUE)) #6 days before the current day (so 7-day total including the current day).
+
+rolling_7d #notice this only print a table, slide_dbl() applies a sliding window operation on the data but we must plot it ourselves. 
+
+```
+
+ We can overlay the rolling mean over the counts in one plot. We can do this using ggplot and multiple `+geom_X()` argumemnts
+```{r}
+ggplot(rolling_7d, aes(x = date)) +
+  geom_col(aes(y = count), fill = "lightblue", alpha = 0.6) + #plot counts as bars
+  geom_line(aes(y = rolling_mean_7d), color = "red", size = 1) + #plot rolling mean as line
+  labs(title = "Daily Tweet Counts with 7-Day Rolling Mean",
+       x = "Date",
+       y = "Tweet Count") +
+  theme_minimal()
+```
+
+
+```{r}
+# Calculate 30-day rolling mean
+rolling_30d<-daily_tweets %>%
+  arrange(date) %>%
+  mutate(rolling_mean_30d = slide_dbl(count, mean, .before = 29, .complete = TRUE))
+
+
+
+ggplot(rolling_30d, aes(x = date)) +
+  geom_col(aes(y = count), fill = "skyblue", alpha = 0.6) +      
+  geom_line(aes(y = rolling_mean_30d), color = "red", size = 1) +
+  labs(
+    title = "Daily Tweet Counts with 30-Day Rolling Mean",
+    x = "Date",
+    y = "Number of Tweets"
+  ) +
+  theme_minimal()
+```
+
+What if we want to overlay our plots with the original counts?
+```{r}
+# Plot the original daily counts and rolling means
+combined<-daily_tweets %>%
+  arrange(date) %>%
+  mutate(
+    rolling_7d = slide_dbl(count, mean, .before = 6, .complete = TRUE),
+    rolling_30d = slide_dbl(count, mean, .before = 29, .complete = TRUE)
+  )
+
+ggplot(combined, aes(x = date)) +
+  geom_col(aes(y = count), fill = "skyblue", alpha = 0.5) +
+  geom_line(aes(y = rolling_7d, color = "7-day Rolling Mean"), size = 1, na.rm = TRUE) +
+  geom_line(aes(y = rolling_30d, color = "30-day Rolling Mean"), size = 1, na.rm = TRUE) +
+  scale_color_manual(
+    name = "Legend",
+    values = c("7-day Rolling Mean" = "orange", "30-day Rolling Mean" = "red")
+  ) +
+  labs(
+    title = "Daily Tweets with 7-day and 30-day Rolling Means",
+    x = "Date",
+    y = "Number of Tweets"
+  ) +
+  theme_minimal()
+
+```
+- The daily tweet counts (blue line) show high variability with many spikes.
+- The 7-day rolling mean (orange line) smooths out daily fluctuations while still capturing weekly patterns
+- The 30-day rolling mean (green line) shows the longer-term trend, smoothing out both daily and weekly variation. 
+It reveals a more stable upward trend compared to the noisier daily data
+
+That's the end of the analysis worksheet, hope enjoyed it!
+
