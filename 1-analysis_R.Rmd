@@ -352,7 +352,7 @@ We do not have this problem in our main dataset. However combined_df has it sinc
 ```{r}
 dim(df[duplicated(df$id),]) # rows should be 0 
 
-dim(combined_df[duplicated(combined_df$id),] ) # rows should be 3002
+dim(combined_df[,duplicated(combined_df$id)]) # rows should be 3002
 
 #you can remove dim if you'd like to print the actual rows. 
 ```
